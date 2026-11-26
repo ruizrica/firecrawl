@@ -146,7 +146,6 @@
     "escape-html": "^1.0.3",
     "express": "5.2.1",
     "express-ws": "^5.0.2",
-    "foundationdb": "^2.0.1",
     "geoip-country": "^5.0.202608010109",
     "he": "^1.2.0",
     "http-cookie-agent": "^7.0.1",
@@ -176,6 +175,9 @@
     "ws": "^8.21.0",
     "xml2js": "^0.6.2",
     "zod": "4.6.7"
+  },
+  "optionalDependencies": {
+    "foundationdb": "^2.0.1"
   },
   "nodemonConfig": {
     "ignore": [
