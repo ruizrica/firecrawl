@@ -615,7 +615,23 @@ async function waitForRabbitMQ(
       const connection = await amqp.connect(`amqp://${host}:${port}`, {
         timeout: 2000,
       });
-      await connection.close();
+      try {
+        // Workers start together and race to create each NuQ prefetch queue.
+        // A racing declare can return before the quorum queue process runs,
+        // so their first get fails with 541 noproc. Create the queues here,
+        // one at a time, and prove a get works. Keep the arguments in sync
+        // with startSender in services/worker/nuq.ts.
+        const channel = await connection.createChannel();
+        for (const queue of ["nuq.queue_scrape", "nuq.queue_crawl_finished"]) {
+          await channel.assertQueue(queue + ".prefetch", {
+            durable: true,
+            arguments: { "x-queue-type": "quorum", "x-max-length": 20000 },
+          });
+          await channel.get(queue + ".prefetch", { noAck: true });
+        }
+      } finally {
+        await connection.close().catch(() => {});
+      }
 
       logger.success("RabbitMQ is ready");
       return;
