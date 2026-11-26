@@ -9,8 +9,17 @@ let fdbModule: typeof FDBModule | null = null;
 
 export function getFdb(): typeof FDBModule {
   if (fdbModule === null) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    fdbModule = require("foundationdb") as typeof FDBModule;
+    let mod: typeof FDBModule;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      mod = require("foundationdb") as typeof FDBModule;
+    } catch (error) {
+      throw new Error(
+        "The FDB backend (NUQ_BACKEND=fdb or FDB_CLUSTER_FILE) needs the FoundationDB client library (libfdb_c), which could not be loaded. Install the FoundationDB client (https://apple.github.io/foundationdb/downloads.html) and reinstall dependencies, or use the Postgres backend.",
+        { cause: error },
+      );
+    }
+    fdbModule = mod;
     fdbModule.setAPIVersion(720);
   }
   return fdbModule;

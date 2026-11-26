@@ -151,7 +151,7 @@ const configSchema = z.object({
 
   // Testing
   TEST_API_KEY: z.string().optional(),
-  TEST_API_URL: z.string().default("http://127.0.0.1:3002"),
+  TEST_API_URL: z.string().default("http://localhost:3002"),
   TEST_SUITE_SELF_HOSTED: z.stringbool().optional(),
   TEST_SUITE_WEBSITE: z.string().default("http://127.0.0.1:4321"),
 

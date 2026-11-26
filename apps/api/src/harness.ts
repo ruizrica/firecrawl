@@ -475,7 +475,7 @@ async function startNuqPostgresContainer(
   logger.info(`Starting PostgreSQL container: ${containerName}`);
   const start = execForward(
     `${runtime}@start`,
-    `${runtime} run -d --name ${containerName} -p 5432:5432 -e POSTGRES_PASSWORD=${shellEscape(POSTGRES_PASSWORD)} -e POSTGRES_USER=${shellEscape(POSTGRES_USER)} -e POSTGRES_DB=${shellEscape(POSTGRES_DB)} firecrawl-nuq-postgres:latest`,
+    `${runtime} run -d --name ${containerName} -p ${POSTGRES_PORT}:5432 -e POSTGRES_PASSWORD=${shellEscape(POSTGRES_PASSWORD)} -e POSTGRES_USER=${shellEscape(POSTGRES_USER)} -e POSTGRES_DB=${shellEscape(POSTGRES_DB)} firecrawl-nuq-postgres:latest`,
   );
   await start.promise;
   logger.success(`PostgreSQL container started: ${containerName}`);
@@ -565,10 +565,10 @@ async function setupNuqPostgres(): Promise<Services["nuqPostgres"]> {
   await startNuqPostgresContainer(runtime, containerName);
 
   // Wait for PostgreSQL to be ready
-  await waitForPostgres("localhost", 5432);
+  await waitForPostgres("localhost", Number(POSTGRES_PORT));
 
   // Set environment variables for the services with proper encoding
-  const dbUrl = `postgresql://${encodeURIComponent(POSTGRES_USER)}:${encodeURIComponent(POSTGRES_PASSWORD)}@localhost:5432/${encodeURIComponent(POSTGRES_DB)}`;
+  const dbUrl = `postgresql://${encodeURIComponent(POSTGRES_USER)}:${encodeURIComponent(POSTGRES_PASSWORD)}@localhost:${POSTGRES_PORT}/${encodeURIComponent(POSTGRES_DB)}`;
   config.NUQ_DATABASE_URL = dbUrl;
   config.NUQ_DATABASE_URL_LISTEN = dbUrl;
   process.env.NUQ_DATABASE_URL = dbUrl;
@@ -607,6 +607,7 @@ async function waitForRabbitMQ(
 ): Promise<void> {
   logger.info("Waiting for RabbitMQ to be ready...");
   const start = Date.now();
+  let lastError: unknown;
 
   while (Date.now() - start < timeoutMs) {
     try {
@@ -615,17 +616,36 @@ async function waitForRabbitMQ(
       const connection = await amqp.connect(`amqp://${host}:${port}`, {
         timeout: 2000,
       });
-      await connection.close();
+      try {
+        // Workers start together and race to create each NuQ prefetch queue.
+        // A racing declare can return before the quorum queue process runs,
+        // so their first get fails with 541 noproc. Create the queues here,
+        // one at a time, and prove a get works. Keep the arguments in sync
+        // with startSender in services/worker/nuq.ts.
+        const channel = await connection.createChannel();
+        for (const queue of ["nuq.queue_scrape", "nuq.queue_crawl_finished"]) {
+          await channel.assertQueue(queue + ".prefetch", {
+            durable: true,
+            arguments: { "x-queue-type": "quorum", "x-max-length": 20000 },
+          });
+          await channel.get(queue + ".prefetch", { noAck: true });
+        }
+      } finally {
+        await connection.close().catch(() => {});
+      }
 
       logger.success("RabbitMQ is ready");
       return;
     } catch (e) {
       // Not ready yet, wait and retry
+      lastError = e;
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
 
-  throw new Error(`RabbitMQ did not become ready within ${timeoutMs}ms`);
+  throw new Error(`RabbitMQ did not become ready within ${timeoutMs}ms`, {
+    cause: lastError,
+  });
 }
 
 async function setupNuqRabbitMQ(): Promise<Services["nuqRabbitMQ"]> {
