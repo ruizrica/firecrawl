@@ -475,7 +475,7 @@ async function startNuqPostgresContainer(
   logger.info(`Starting PostgreSQL container: ${containerName}`);
   const start = execForward(
     `${runtime}@start`,
-    `${runtime} run -d --name ${containerName} -p 5432:5432 -e POSTGRES_PASSWORD=${shellEscape(POSTGRES_PASSWORD)} -e POSTGRES_USER=${shellEscape(POSTGRES_USER)} -e POSTGRES_DB=${shellEscape(POSTGRES_DB)} firecrawl-nuq-postgres:latest`,
+    `${runtime} run -d --name ${containerName} -p ${POSTGRES_PORT}:5432 -e POSTGRES_PASSWORD=${shellEscape(POSTGRES_PASSWORD)} -e POSTGRES_USER=${shellEscape(POSTGRES_USER)} -e POSTGRES_DB=${shellEscape(POSTGRES_DB)} firecrawl-nuq-postgres:latest`,
   );
   await start.promise;
   logger.success(`PostgreSQL container started: ${containerName}`);
@@ -565,10 +565,10 @@ async function setupNuqPostgres(): Promise<Services["nuqPostgres"]> {
   await startNuqPostgresContainer(runtime, containerName);
 
   // Wait for PostgreSQL to be ready
-  await waitForPostgres("localhost", 5432);
+  await waitForPostgres("localhost", Number(POSTGRES_PORT));
 
   // Set environment variables for the services with proper encoding
-  const dbUrl = `postgresql://${encodeURIComponent(POSTGRES_USER)}:${encodeURIComponent(POSTGRES_PASSWORD)}@localhost:5432/${encodeURIComponent(POSTGRES_DB)}`;
+  const dbUrl = `postgresql://${encodeURIComponent(POSTGRES_USER)}:${encodeURIComponent(POSTGRES_PASSWORD)}@localhost:${POSTGRES_PORT}/${encodeURIComponent(POSTGRES_DB)}`;
   config.NUQ_DATABASE_URL = dbUrl;
   config.NUQ_DATABASE_URL_LISTEN = dbUrl;
   process.env.NUQ_DATABASE_URL = dbUrl;
