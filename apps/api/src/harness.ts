@@ -607,6 +607,7 @@ async function waitForRabbitMQ(
 ): Promise<void> {
   logger.info("Waiting for RabbitMQ to be ready...");
   const start = Date.now();
+  let lastError: unknown;
 
   while (Date.now() - start < timeoutMs) {
     try {
@@ -637,11 +638,14 @@ async function waitForRabbitMQ(
       return;
     } catch (e) {
       // Not ready yet, wait and retry
+      lastError = e;
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
 
-  throw new Error(`RabbitMQ did not become ready within ${timeoutMs}ms`);
+  throw new Error(`RabbitMQ did not become ready within ${timeoutMs}ms`, {
+    cause: lastError,
+  });
 }
 
 async function setupNuqRabbitMQ(): Promise<Services["nuqRabbitMQ"]> {
